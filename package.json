@@ -1,0 +1,21 @@
+{
+  "name": "meta-ads-mcp",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "secrets": "node scripts/push-secrets.mjs",
+    "deploy": "node scripts/deploy.mjs",
+    "gan-mcp": "node scripts/gan-mcp.mjs",
+    "logs": "wrangler tail",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260925.1",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.140.0"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "workerd": true
+  }
+}

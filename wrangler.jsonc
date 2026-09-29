@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Tên Worker. Đổi tên thì đổi luôn "service" ở mục services bên dưới cho giống.
+  "name": "meta-ads-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-20",
+  "observability": { "enabled": true },
+
+  // Đồng bộ Meta -> Supabase mỗi 6 tiếng. Chưa cài Supabase thì lịch này tự bỏ qua.
+  "triggers": { "crons": ["0 */6 * * *"] },
+
+  // Worker tự gọi chính nó để mỗi tài khoản đồng bộ trong 1 lần chạy riêng
+  "services": [{ "binding": "SELF", "service": "meta-ads-mcp" }],
+
+  "vars": {
+    "META_API_VERSION": "v24.0",
+    "SYNC_DAYS": "3",
+    // Bỏ trống = đồng bộ mọi tài khoản ACTIVE. Hoặc liệt kê: "act_111,act_222"
+    "SYNC_ACCOUNTS": "",
+    "DEFAULT_AD_ACCOUNT": "",
+    "DEFAULT_PAGE_ID": "",
+    // CHỐT AN TOÀN: MCP từ chối mọi ngân sách vượt mức này (đơn vị thường: VND = đồng, USD = đô).
+    // Tài khoản dùng tiền tệ khác thì thêm vào đây, không thì không đặt được ngân sách.
+    "BUDGET_CAPS": "{\"VND\":{\"daily\":1000000,\"lifetime\":20000000},\"USD\":{\"daily\":100,\"lifetime\":2000}}"
+  }
+  // Secrets (npm run secrets, đọc từ file .env): META_ACCESS_TOKEN, META_APP_SECRET, MCP_AUTH_KEY,
+  // và tuỳ chọn SUPABASE_URL, SUPABASE_SERVICE_KEY
+}

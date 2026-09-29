@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Meta Ads Dashboard</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7; --surface-1: #fcfcfb; --border: rgba(11,11,11,0.10);
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --wash: rgba(11,11,11,0.05);
+    --series-1: #2a78d6; --series-2: #eb6834;
+    --shadow: 0 1px 2px rgba(0,0,0,.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface-1: #1a1a19; --border: rgba(255,255,255,0.10);
+      --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
+      --grid: #2c2c2a; --axis: #383835; --wash: rgba(255,255,255,0.06);
+      --series-1: #3987e5; --series-2: #d95926; --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19; --border: rgba(255,255,255,0.10);
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --wash: rgba(255,255,255,0.06);
+    --series-1: #3987e5; --series-2: #d95926; --shadow: none;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--text-primary);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1180px; margin: 0 auto; padding: 20px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; margin-bottom: 16px; }
+  h1 { font-size: 20px; margin: 0; font-weight: 650; }
+  .muted { color: var(--text-muted); font-size: 12px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+  select, .seg button {
+    font: inherit; color: var(--text-primary); background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 8px; height: 36px; padding: 0 10px;
+  }
+  select { max-width: 100%; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-1); }
+  .seg button { border: 0; border-radius: 0; cursor: pointer; background: transparent; color: var(--text-secondary); }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button:hover { background: var(--wash); }
+  .seg button[aria-pressed="true"] { color: var(--text-primary); font-weight: 650; background: var(--wash); }
+  #content { transition: opacity .15s; }
+  #content.loading { opacity: .45; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+  .tile { padding: 14px 16px; }
+  .tile .label { color: var(--text-secondary); font-size: 12px; }
+  .tile .value { font-size: 24px; font-weight: 650; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .delta { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .chart-card { padding: 14px 16px 10px; min-width: 0; }
+  .chart-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; align-items: baseline; }
+  h2 { font-size: 14px; margin: 0; font-weight: 650; }
+  .legend { display: flex; gap: 12px; color: var(--text-secondary); font-size: 12px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { display: inline-block; width: 14px; height: 2px; border-radius: 1px; }
+  .chart { position: relative; height: 240px; margin-top: 8px; }
+  .chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
+  .chart text { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .chart .end-label { fill: var(--text-secondary); font-size: 11px; }
+  .tip {
+    position: absolute; pointer-events: none; z-index: 2; min-width: 140px;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.12); padding: 8px 10px; font-size: 12px; display: none;
+  }
+  .tip .t-date { color: var(--text-muted); margin-bottom: 4px; }
+  .tip .row { display: flex; align-items: center; gap: 8px; }
+  .tip .row i { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+  .tip .row b { font-weight: 650; color: var(--text-primary); }
+  .tip .row span { color: var(--text-secondary); }
+  .table-card { padding: 14px 0 4px; }
+  .table-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 0 16px 10px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 8px 12px; text-align: right; white-space: nowrap; border-top: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; padding-left: 16px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+  th:last-child, td:last-child { padding-right: 16px; }
+  th { color: var(--text-secondary); font-weight: 600; font-size: 12px; cursor: pointer; user-select: none; }
+  th:hover { color: var(--text-primary); }
+  th[aria-sort="descending"]::after { content: " ↓"; }
+  th[aria-sort="ascending"]::after { content: " ↑"; }
+  tbody tr:hover { background: var(--wash); }
+  .empty { padding: 32px 16px; text-align: center; color: var(--text-muted); }
+  .error { padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-1); margin-bottom: 16px; }
+  @media (max-width: 520px) { .tile .value { font-size: 20px; } .chart { height: 200px; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Meta Ads Dashboard</h1>
+    <div class="muted" id="synced"></div>
+  </header>
+
+  <div class="filters">
+    <select id="account" aria-label="Tài khoản quảng cáo"></select>
+    <div class="seg" id="range" role="group" aria-label="Khoảng thời gian">
+      <button data-days="7">7 ngày</button>
+      <button data-days="14">14 ngày</button>
+      <button data-days="30">30 ngày</button>
+      <button data-days="90">90 ngày</button>
+    </div>
+  </div>
+
+  <div id="error"></div>
+  <div id="content">
+    <section class="tiles" id="tiles"></section>
+    <section class="charts">
+      <div class="card chart-card">
+        <div class="chart-head"><h2 id="c1-title"></h2><div class="legend" id="c1-legend"></div></div>
+        <div class="chart" id="c1"></div>
+      </div>
+      <div class="card chart-card">
+        <div class="chart-head"><h2 id="c2-title"></h2></div>
+        <div class="chart" id="c2"></div>
+      </div>
+    </section>
+    <section class="card table-card">
+      <div class="table-head">
+        <h2 id="t-title">Xếp hạng</h2>
+        <div class="seg" id="level" role="group" aria-label="Cấp báo cáo">
+          <button data-level="campaign">Campaign</button>
+          <button data-level="adset">Ad set</button>
+          <button data-level="ad">Ad</button>
+        </div>
+      </div>
+      <div class="table-wrap"><table id="table"></table></div>
+    </section>
+  </div>
+</main>
+
+<script>
+(() => {
+  const base = location.pathname.replace(/\/+$/, "");
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k) { try { return localStorage.getItem("mad-" + k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem("mad-" + k, v); } catch {} },
+  };
+  const state = {
+    accounts: [], account: store.get("account"), days: Number(store.get("days")) || 30,
+    level: store.get("level") || "campaign", sort: { key: "spend", dir: -1 }, rows: [], mode: "sales",
+  };
+
+  // ---------- helpers
+  const api = async (path) => {
+    const r = await fetch(base + "/api/" + path);
+    const j = await r.json().catch(() => ({ error: "HTTP " + r.status }));
+    if (!r.ok || j.error) throw new Error(j.error || "HTTP " + r.status);
+    return j;
+  };
+  const acc = () => state.accounts.find((a) => a.id === state.account) || state.accounts[0];
+  const cur = () => (acc() && acc().currency) || "USD";
+  const locale = () => (cur() === "VND" ? "vi-VN" : "en-US");
+  const money = (v, compact) => v == null || !isFinite(v) ? "–" : new Intl.NumberFormat(locale(), {
+    style: "currency", currency: cur(), maximumFractionDigits: cur() === "VND" ? 0 : (compact ? 0 : 2),
+    notation: compact ? "compact" : "standard",
+  }).format(v);
+  const int = (v) => v == null ? "–" : new Intl.NumberFormat(locale()).format(Math.round(v));
+  const pct = (v) => v == null || !isFinite(v) ? "–" : v.toFixed(2) + "%";
+  const ratio = (v) => v == null || !isFinite(v) ? "–" : v.toFixed(2);
+  const div = (a, b) => (b ? a / b : null);
+  const ymd = (d, tz) => new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+  const addDays = (s, n) => { const d = new Date(s + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const shortDate = (s) => s.slice(8, 10) + "/" + s.slice(5, 7);
+  const el = (tag, attrs = {}, text) => {
+    const e = document.createElementNS(attrs.svg ? "http://www.w3.org/2000/svg" : "http://www.w3.org/1999/xhtml", tag);
+    for (const [k, v] of Object.entries(attrs)) if (k !== "svg") e.setAttribute(k, v);
+    if (text != null) e.textContent = text;
+    return e;
+  };
+  const svgEl = (tag, attrs, text) => el(tag, { ...attrs, svg: 1 }, text);
+
+  function totals(rows) {
+    const t = { spend: 0, impressions: 0, link_clicks: 0, purchases: 0, purchase_value: 0, messages: 0, leads: 0 };
+    for (const r of rows) for (const k in t) t[k] += Number(r[k] || 0);
+    t.roas = div(t.purchase_value, t.spend); t.cpa = div(t.spend, t.purchases);
+    t.cpm_msg = div(t.spend, t.messages); t.cpl = div(t.spend, t.leads);
+    t.ctr = t.impressions ? 100 * t.link_clicks / t.impressions : null;
+    t.cpm = t.impressions ? 1000 * t.spend / t.impressions : null;
+    return t;
+  }
+  function fillDays(rows, since, until) {
+    const map = new Map(rows.map((r) => [r.level_id, r]));
+    const out = [];
+    for (let d = since; d <= until; d = addDays(d, 1)) out.push({ date: d, ...(map.get(d) || {}) });
+    return out.map((r) => ({ ...r, spend: +r.spend || 0, purchase_value: +r.purchase_value || 0, purchases: +r.purchases || 0, messages: +r.messages || 0 }));
+  }
+
+  // ---------- tiles
+  function renderTiles(t, p) {
+    const delta = (a, b, lowerIsBetter) => {
+      if (a == null || b == null || !b) return "Kỳ trước: –";
+      const d = (a - b) / Math.abs(b) * 100;
+      return (d >= 0 ? "▲ " : "▼ ") + Math.abs(d).toFixed(0) + "% so với kỳ trước";
+    };
+    const defs = state.mode === "sales" ? [
+      ["Chi tiêu", money(t.spend), delta(t.spend, p.spend)],
+      ["Doanh thu", money(t.purchase_value), delta(t.purchase_value, p.purchase_value)],
+      ["ROAS", ratio(t.roas), delta(t.roas, p.roas)],
+      ["Đơn mua", int(t.purchases), delta(t.purchases, p.purchases)],
+      ["Giá mỗi đơn", money(t.cpa), delta(t.cpa, p.cpa)],
+      ["CTR (link)", pct(t.ctr), delta(t.ctr, p.ctr)],
+    ] : [
+      ["Chi tiêu", money(t.spend), delta(t.spend, p.spend)],
+      ["Tin nhắn", int(t.messages), delta(t.messages, p.messages)],
+      ["Giá mỗi tin", money(t.cpm_msg), delta(t.cpm_msg, p.cpm_msg)],
+      ["Lead", int(t.leads), delta(t.leads, p.leads)],
+      ["CTR (link)", pct(t.ctr), delta(t.ctr, p.ctr)],
+      ["CPM", money(t.cpm), delta(t.cpm, p.cpm)],
+    ];
+    const box = $("tiles"); box.replaceChildren();
+    for (const [label, value, d] of defs) {
+      const c = el("div", { class: "card tile" });
+      c.append(el("div", { class: "label" }, label), el("div", { class: "value", title: value }, value), el("div", { class: "delta" }, d));
+      box.append(c);
+    }
+  }
+
+  // ---------- charts
+  function niceMax(v) {
+    if (v <= 0) return 1;
+    const p = Math.pow(10, Math.floor(Math.log10(v))); const n = v / p;
+    return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p;
+  }
+  function frame(host, days, maxV, fmt) {
+    host.replaceChildren();
+    const W = host.clientWidth, H = host.clientHeight;
+    const m = { l: 56, r: 12, t: 8, b: 22 };
+    const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+    const top = niceMax(maxV * 1.05);
+    const x = (i) => m.l + (days.length === 1 ? (W - m.l - m.r) / 2 : i * (W - m.l - m.r) / (days.length - 1));
+    const y = (v) => H - m.b - v / top * (H - m.t - m.b);
+    for (let k = 0; k <= 4; k++) {
+      const v = top * k / 4, yy = y(v);
+      svg.append(svgEl("line", { x1: m.l, x2: W - m.r, y1: yy, y2: yy, stroke: k ? "var(--grid)" : "var(--axis)", "stroke-width": 1 }));
+      svg.append(svgEl("text", { x: m.l - 8, y: yy + 4, "text-anchor": "end" }, fmt(v)));
+    }
+    const step = Math.max(1, Math.ceil(days.length / Math.max(2, Math.floor((W - m.l - m.r) / 56))));
+    days.forEach((d, i) => { if (i % step === 0 || i === days.length - 1 && days.length < 8) svg.append(svgEl("text", { x: x(i), y: H - 6, "text-anchor": "middle" }, shortDate(d.date))); });
+    host.append(svg);
+    const tip = el("div", { class: "tip" }); host.append(tip);
+    return { svg, tip, W, H, m, x, y };
+  }
+  function showTip(f, host, px, py, date, rows) {
+    f.tip.replaceChildren(el("div", { class: "t-date" }, date));
+    for (const [color, value, name] of rows) {
+      const r = el("div", { class: "row" }); const i = el("i"); i.style.background = color;
+      r.append(i, el("b", {}, value), el("span", {}, name)); f.tip.append(r);
+    }
+    f.tip.style.display = "block";
+    const tw = f.tip.offsetWidth, th = f.tip.offsetHeight;
+    let left = px + 12; if (left + tw > f.W) left = px - tw - 12; if (left < 0) left = 0;
+    f.tip.style.left = left + "px"; f.tip.style.top = Math.max(0, Math.min(py - th / 2, f.H - th)) + "px";
+  }
+
+  function lineChart(host, days, series) {
+    const maxV = Math.max(0, ...series.flatMap((s) => days.map((d) => d[s.key])));
+    const f = frame(host, days, maxV, (v) => money(v, true));
+    for (const s of series) {
+      const pts = days.map((d, i) => `${f.x(i).toFixed(1)},${f.y(d[s.key]).toFixed(1)}`).join(" ");
+      f.svg.append(svgEl("polyline", { points: pts, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    }
+    const cross = svgEl("line", { y1: f.m.t, y2: f.H - f.m.b, stroke: "var(--axis)", "stroke-width": 1, visibility: "hidden" });
+    const dots = series.map((s) => svgEl("circle", { r: 4, fill: s.color, stroke: "var(--surface-1)", "stroke-width": 2, visibility: "hidden" }));
+    f.svg.append(cross, ...dots);
+    const hit = svgEl("rect", { x: f.m.l, y: 0, width: Math.max(0, f.W - f.m.l - f.m.r), height: f.H, fill: "transparent", tabindex: 0 });
+    f.svg.append(hit);
+    const at = (i) => {
+      const d = days[i], xx = f.x(i);
+      cross.setAttribute("x1", xx); cross.setAttribute("x2", xx); cross.setAttribute("visibility", "visible");
+      series.forEach((s, k) => { dots[k].setAttribute("cx", xx); dots[k].setAttribute("cy", f.y(d[s.key])); dots[k].setAttribute("visibility", "visible"); });
+      const rows = series.map((s) => [s.color, money(d[s.key]), s.name]);
+      if (series.length > 1 && d.spend) rows.push(["transparent", ratio(d.purchase_value / d.spend), "ROAS"]);
+      showTip(f, host, xx, f.y(Math.max(...series.map((s) => d[s.key]))), d.date, rows);
+    };
+    const hide = () => { cross.setAttribute("visibility", "hidden"); dots.forEach((c) => c.setAttribute("visibility", "hidden")); f.tip.style.display = "none"; };
+    hit.addEventListener("pointermove", (e) => {
+      const r = f.svg.getBoundingClientRect(); const px = (e.clientX - r.left) * f.W / r.width;
+      const span = (f.W - f.m.l - f.m.r) / Math.max(1, days.length - 1);
+      at(Math.max(0, Math.min(days.length - 1, Math.round((px - f.m.l) / span))));
+    });
+    hit.addEventListener("pointerleave", hide); hit.addEventListener("blur", hide);
+    let focusIdx = days.length - 1;
+    hit.addEventListener("focus", () => at(focusIdx));
+    hit.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowLeft") focusIdx = Math.max(0, focusIdx - 1); else if (e.key === "ArrowRight") focusIdx = Math.min(days.length - 1, focusIdx + 1); else return;
+      e.preventDefault(); at(focusIdx);
+    });
+  }
+
+  function barChart(host, days, key, name, fmt) {
+    const maxV = Math.max(1, ...days.map((d) => d[key]));
+    const f = frame(host, days, maxV, (v) => (v % 1 ? "" : int(v)));
+    const band = (f.W - f.m.l - f.m.r) / Math.max(1, days.length);
+    const bw = Math.max(2, Math.min(28, band - 2));
+    const base = f.y(0);
+    days.forEach((d, i) => {
+      const cx = f.x(i), v = d[key], top = f.y(v), h = base - top;
+      if (v > 0) {
+        const r = Math.min(4, bw / 2, h), x0 = cx - bw / 2, x1 = cx + bw / 2;
+        f.svg.append(svgEl("path", {
+          d: `M${x0},${base}V${top + r}Q${x0},${top} ${x0 + r},${top}H${x1 - r}Q${x1},${top} ${x1},${top + r}V${base}Z`,
+          fill: "var(--series-1)", class: "bar",
+        }));
+      }
+      const hit = svgEl("rect", { x: cx - band / 2, y: f.m.t, width: band, height: base - f.m.t, fill: "transparent", tabindex: 0 });
+      const on = () => { hit.setAttribute("fill", "var(--wash)"); showTip(f, host, cx, top, d.date, [["var(--series-1)", fmt(v), name]]); };
+      const off = () => { hit.setAttribute("fill", "transparent"); f.tip.style.display = "none"; };
+      hit.addEventListener("pointerenter", on); hit.addEventListener("focus", on);
+      hit.addEventListener("pointerleave", off); hit.addEventListener("blur", off);
+      f.svg.append(hit);
+    });
+  }
+
+  let lastDays = null;
+  function renderCharts(days) {
+    lastDays = days;
+    const legend = $("c1-legend"); legend.replaceChildren();
+    const series = state.mode === "sales"
+      ? [{ key: "spend", name: "Chi tiêu", color: "var(--series-1)" }, { key: "purchase_value", name: "Doanh thu", color: "var(--series-2)" }]
+      : [{ key: "spend", name: "Chi tiêu", color: "var(--series-1)" }];
+    $("c1-title").textContent = state.mode === "sales" ? "Chi tiêu và doanh thu theo ngày" : "Chi tiêu theo ngày";
+    if (series.length > 1) for (const s of series) { const sp = el("span"); const i = el("i"); i.style.background = s.color; sp.append(i, document.createTextNode(s.name)); legend.append(sp); }
+    lineChart($("c1"), days, series);
+    if (state.mode === "sales") { $("c2-title").textContent = "Đơn mua theo ngày"; barChart($("c2"), days, "purchases", "đơn", int); }
+    else { $("c2-title").textContent = "Tin nhắn theo ngày"; barChart($("c2"), days, "messages", "tin nhắn", int); }
+  }
+
+  // ---------- table
+  function columns() {
+    const common = [["level_name", "Tên", (r) => r.level_name || r.level_id], ["spend", "Chi tiêu", (r) => money(+r.spend)]];
+    return state.mode === "sales" ? [...common,
+      ["purchases", "Đơn", (r) => int(+r.purchases)], ["purchase_value", "Doanh thu", (r) => money(+r.purchase_value)],
+      ["roas", "ROAS", (r) => ratio(r.roas == null ? null : +r.roas)], ["cost_per_purchase", "Giá/đơn", (r) => money(r.cost_per_purchase == null ? null : +r.cost_per_purchase)],
+      ["add_to_cart", "Thêm giỏ", (r) => int(+r.add_to_cart)], ["ctr", "CTR", (r) => pct(r.ctr == null ? null : +r.ctr)], ["cpc", "CPC", (r) => money(r.cpc == null ? null : +r.cpc)],
+    ] : [...common,
+      ["messages", "Tin nhắn", (r) => int(+r.messages)], ["cost_per_message", "Giá/tin", (r) => money(r.cost_per_message == null ? null : +r.cost_per_message)],
+      ["leads", "Lead", (r) => int(+r.leads)], ["purchases", "Đơn", (r) => int(+r.purchases)],
+      ["ctr", "CTR", (r) => pct(r.ctr == null ? null : +r.ctr)], ["cpm", "CPM", (r) => money(r.cpm == null ? null : +r.cpm)],
+    ];
+  }
+  function renderTable() {
+    const cols = columns(), t = $("table"); t.replaceChildren();
+    const { key, dir } = state.sort;
+    const rows = [...state.rows].sort((a, b) => {
+      const va = a[key], vb = b[key];
+      if (key === "level_name") return dir * String(va || "").localeCompare(String(vb || ""));
+      const na = va == null ? -Infinity : +va, nb = vb == null ? -Infinity : +vb;
+      return dir * (na - nb);
+    });
+    const thead = el("thead"), hr = el("tr");
+    for (const [k, label] of cols) {
+      const th = el("th", { scope: "col", tabindex: 0 }, label);
+      if (k === key) th.setAttribute("aria-sort", dir < 0 ? "descending" : "ascending");
+      const go = () => { state.sort = { key: k, dir: k === key ? -dir : (k === "level_name" ? 1 : -1) }; renderTable(); };
+      th.addEventListener("click", go); th.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+      hr.append(th);
+    }
+    thead.append(hr);
+    const tbody = el("tbody");
+    for (const r of rows) {
+      const tr = el("tr");
+      cols.forEach(([, , fmt], i) => { const td = el("td", {}, fmt(r)); if (!i) td.title = td.textContent; tr.append(td); });
+      tbody.append(tr);
+    }
+    t.append(thead, tbody);
+    if (!rows.length) { const tr = el("tr"); tr.append(el("td", { colspan: cols.length, class: "empty" }, "Không có dữ liệu trong khoảng này.")); tbody.append(tr); }
+  }
+
+  // ---------- load
+  function pressed(groupId, attr, value) {
+    for (const b of $(groupId).querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset[attr] === String(value)));
+  }
+  let seq = 0;
+  async function load() {
+    const my = ++seq;
+    const a = acc(); if (!a) return;
+    const until = ymd(new Date(), a.timezone_name || "UTC");
+    const since = addDays(until, 1 - state.days);
+    const pUntil = addDays(since, -1), pSince = addDays(pUntil, 1 - state.days);
+    const q = (s, u, level) => `report?account=${encodeURIComponent(a.id)}&since=${s}&until=${u}&level=${level}`;
+    $("content").classList.add("loading");
+    try {
+      const [cur, prev, table] = await Promise.all([api(q(since, until, "day")), api(q(pSince, pUntil, "day")), api(q(since, until, state.level))]);
+      if (my !== seq) return;
+      $("error").replaceChildren();
+      const t = totals(cur), p = totals(prev);
+      state.mode = t.messages > t.purchases ? "msg" : "sales";
+      state.rows = table;
+      renderTiles(t, p);
+      renderCharts(fillDays(cur, since, until));
+      $("t-title").textContent = "Xếp hạng " + { campaign: "campaign", adset: "ad set", ad: "quảng cáo" }[state.level] + " · " + shortDate(since) + " – " + shortDate(until);
+      renderTable();
+    } catch (e) {
+      if (my !== seq) return;
+      $("error").replaceChildren(el("div", { class: "error" }, "Không tải được dữ liệu: " + e.message));
+    } finally {
+      if (my === seq) $("content").classList.remove("loading");
+    }
+  }
+
+  async function init() {
+    try {
+      const meta = await api("accounts");
+      state.accounts = meta.accounts;
+      if (meta.last_sync) $("synced").textContent = "Đồng bộ lần cuối: " + new Date(meta.last_sync).toLocaleString("vi-VN");
+    } catch (e) {
+      $("error").replaceChildren(el("div", { class: "error" }, "Không tải được danh sách tài khoản: " + e.message));
+      return;
+    }
+    const sel = $("account");
+    for (const a of state.accounts) sel.append(el("option", { value: a.id }, `${a.name} (${a.currency})`));
+    if (!state.accounts.some((a) => a.id === state.account)) state.account = state.accounts[0] && state.accounts[0].id;
+    sel.value = state.account || "";
+    sel.addEventListener("change", () => { state.account = sel.value; store.set("account", sel.value); state.sort = { key: "spend", dir: -1 }; load(); });
+    pressed("range", "days", state.days); pressed("level", "level", state.level);
+    $("range").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; state.days = +b.dataset.days; store.set("days", state.days); pressed("range", "days", state.days); load(); });
+    $("level").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; state.level = b.dataset.level; store.set("level", state.level); pressed("level", "level", state.level); load(); });
+    let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => lastDays && renderCharts(lastDays), 120); });
+    load();
+  }
+  init();
+})();
+</script>
+</body>
+</html>
