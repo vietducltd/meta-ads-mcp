@@ -78,6 +78,10 @@ tài khoản quảng cáo của bạn, và bạn là **quản trị viên** củ
    | `pages_show_list` | Thấy danh sách Fanpage |
    | `pages_read_engagement` | Đọc bài viết trên Page (chạy bài có sẵn) |
    | `pages_manage_ads` | Chạy quảng cáo bằng bài của Page |
+   | `pages_manage_posts` | Đăng bài (chữ, ảnh, album) lên Page bằng tool `publish_page_post` |
+
+   Ở bước 2 (chỉ định tài sản), quyền trên **Trang** phải gồm cả **tạo nội dung**
+   và **quảng cáo**, nếu không sẽ không đăng bài hay tạo quảng cáo từ bài được.
 
 4. Bấm **Tạo mã** → **sao chép token ngay**, vì Meta chỉ hiện một lần. Token bắt
    đầu bằng `EAA...`
@@ -151,6 +155,36 @@ Sau đó **mở lại phiên Claude Code**. Nếu được hỏi có cho phép s
 **Kiểm tra:** trong Claude Code, gõ `kiểm tra kết nối MCP quảng cáo`. Skill
 fb-05 sẽ chạy bộ kiểm tra 9 mục (M1–M9). Kết quả phải là **SẴN SÀNG**.
 
+## MCP làm được gì
+
+| Nhóm | Công cụ |
+|---|---|
+| Đọc | `check_connection`, `list_ad_accounts`, `list_pages`, `list_page_posts`, `list_campaigns`, `list_adsets`, `list_ads`, `get_object`, `get_insights`, `search_targeting`, `preview_ad` |
+| Tạo quảng cáo | `create_campaign`, `create_adset`, `upload_image`, `upload_video`, `create_ad_creative` (ảnh, video, **băng chuyền** `cards`), `create_creative_from_post`, `create_ad` |
+| Đăng bài lên Page | `publish_page_post` (chữ, 1 ảnh, **album nhiều ảnh**, hẹn giờ, bài ẩn), `set_post_published` |
+| Điều khiển | `update_status`, `update_budget`, `update_object` |
+| Báo cáo lịch sử (cần Supabase) | `sync_to_supabase`, `get_saved_report` |
+| Gỡ lỗi | `graph_request` (gọi thẳng Graph API, có tuỳ chọn dùng page token) |
+
+Ảnh trên máy tính không đi qua tool được (quá nặng), nên Worker có thêm 2 đường
+tải ảnh, skill fb-05 có script gọi sẵn:
+- `POST /upload-image/<khoá>?account_id=act_...` → ảnh vào thư viện tài khoản quảng cáo (`image_hash`), script `tai-anh-len.ps1`.
+- `POST /upload-page-photo/<khoá>?page_id=...` → ảnh chưa đăng trên Page (`photo_id`) để ghép bài album, script `tai-anh-page.ps1`.
+
+### Quy trình chuẩn: đăng album lên Page rồi chạy quảng cáo tin nhắn
+
+Cách này giữ đúng bố cục album trên bảng tin, và like/comment/share của quảng
+cáo dồn về chính bài trên Page.
+
+1. `tai-anh-page.ps1 -Anh "1.jpg;2.jpg;3.jpg;4.jpg" -Page <page_id>` → 4 `photo_id` (đúng thứ tự).
+2. `publish_page_post(page_id, message, photo_ids)` (hoặc script `dang-bai-page.ps1`) → `post_id`.
+3. `create_campaign` (OUTCOME_ENGAGEMENT) → `create_adset` (`optimization_goal=CONVERSATIONS`, `destination_type=MESSENGER`, `promoted_object={page_id}`).
+4. `create_creative_from_post(post_id, call_to_action="MESSAGE_PAGE", welcome_from_creative=<creative có mẫu chào>)`.
+   - Tool tự dùng **page token** khi tạo creative từ bài đã đăng (bắt buộc, xem mục lỗi 3858792).
+   - `welcome_from_creative`: ID một creative đã chọn "Mẫu đã lưu" trong Ads Manager. Tool chép nguyên mẫu tin nhắn chào (lời chào, ảnh, câu hỏi gợi ý) sang quảng cáo mới. Tạo mẫu chào một lần trong Ads Manager, sau đó tái dùng mãi.
+5. `create_ad` cho từng ad set, **dùng chung một creative**. Mọi thứ ở trạng thái tạm dừng.
+6. `preview_ad` → gửi link xem trước. Chỉ bật khi người dùng đồng ý.
+
 ## 7. (Tuỳ chọn) Supabase: báo cáo lịch sử và dashboard
 
 Không có Supabase vẫn set quảng cáo và xem số trực tiếp từ Meta bình thường.
@@ -181,6 +215,14 @@ npm install
 npm run deploy
 ```
 
+Sau đó mở phiên Claude Code mới để thấy công cụ mới, rồi gõ `kiểm tra kết nối
+MCP quảng cáo` (mục M4 báo bản cũ hay mới).
+
+**Bản 1.1.0 (10/2026):** đăng bài lên Page (`publish_page_post`, `/upload-page-photo`),
+tạo quảng cáo từ bài trên Page bằng page token (sửa lỗi 3858792), chép mẫu tin
+nhắn chào (`welcome_from_creative`), quảng cáo băng chuyền (`cards`), tool gỡ lỗi
+`graph_request`. Token cần thêm quyền `pages_manage_posts` nếu muốn đăng bài.
+
 ## Lỗi thường gặp
 
 | Hiện tượng | Cách sửa |
@@ -193,6 +235,9 @@ npm run deploy
 | Kiểm tra báo M6 (lỗi 190) | Token hết hạn hoặc bị thu hồi: tạo token mới (mục 2b), sửa `.env`, `npm run secrets` |
 | Kiểm tra báo M7 / M8 | Người dùng hệ thống chưa được gán tài khoản quảng cáo / Page (mục 2b bước 2), hoặc thiếu quyền khi tạo token |
 | Claude không thấy công cụ `mcp__meta-ads__*` | Mở lại phiên Claude Code; kiểm tra đã chạy `npm run gan-mcp` đúng thư mục dự án |
+| Vừa cập nhật MCP mà Claude không thấy công cụ mới | Danh sách công cụ nạp lúc mở phiên: mở phiên mới (hoặc Reconnect server meta-ads) |
+| Tạo creative từ bài trên Page báo lỗi `3858792` "không có quyền quảng cáo… Trang… tài sản file phương tiện" | Bản MCP cũ tạo creative bằng token người dùng. Meta bắt buộc **page token** với bài đã đăng (lỗi này không phải do thiếu quyền). Cập nhật MCP (`git pull`, `npm run deploy`) |
+| `publish_page_post` báo thiếu quyền | Token chưa có `pages_manage_posts`, hoặc người dùng hệ thống chưa có quyền tạo nội dung trên Trang (mục 2b) |
 | Đổi tên Worker trong `wrangler.jsonc` | Đổi luôn `"service"` ở mục `services` cho giống tên mới |
 
 ## Bảo mật

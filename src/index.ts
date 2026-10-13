@@ -52,6 +52,30 @@ export default {
       }
     }
 
+    // Tải ảnh từ máy người dùng lên Fanpage dưới dạng ảnh CHƯA ĐĂNG (để ghép bài nhiều ảnh bằng tool publish_page_post):
+    // POST /upload-page-photo/<key>?page_id=...&filename=...  body = byte ảnh. Trả {photo_id}.
+    if (url.pathname.startsWith("/upload-page-photo/") && req.method === "POST") {
+      if (!authorized(req, url, env)) return new Response("Unauthorized", { status: 401 });
+      try {
+        const pageId = (url.searchParams.get("page_id") || env.DEFAULT_PAGE_ID || "").trim();
+        if (!pageId) throw new ToolError("Thiếu page_id.");
+        const blob = await req.blob();
+        if (!blob.size) throw new ToolError("Body rỗng — cần gửi byte ảnh.");
+        if (blob.size > 30 * 1024 * 1024) throw new ToolError("Ảnh quá 30MB.");
+        const filename = url.searchParams.get("filename") || "anh-bai-viet.jpg";
+        const meta = new Meta(env);
+        const token = await meta.pageToken(pageId);
+        // Ảnh cho bài hẹn giờ phải tải với temporary=true (Meta yêu cầu): thêm &temporary=1
+        const temporary = url.searchParams.get("temporary") === "1" ? true : undefined;
+        const body = await meta.request("POST", `${pageId}/photos`, { published: false, temporary },
+          { field: "source", blob, filename }, false, token);
+        return Response.json({ photo_id: body.id, page_id: pageId });
+      } catch (e) {
+        const msg = e instanceof ToolError ? e.message : `Lỗi không mong đợi: ${e instanceof Error ? e.message : e}`;
+        return Response.json({ error: msg }, { status: 400 });
+      }
+    }
+
     // Được syncAll gọi qua service binding: mỗi tài khoản 1 lần chạy riêng.
     if (url.pathname === "/internal/sync" && req.method === "POST") {
       if (!authorized(req, url, env)) return new Response("Unauthorized", { status: 401 });

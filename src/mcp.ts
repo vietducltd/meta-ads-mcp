@@ -13,6 +13,9 @@ const INSTRUCTIONS =
   "Quy trình tạo quảng cáo: create_campaign -> create_adset -> upload_image/upload_video -> create_ad_creative -> " +
   "create_ad -> preview_ad -> (người dùng đồng ý) update_status ACTIVE. " +
   "Chạy bài có sẵn trên page: list_page_posts (truyền url bài) -> create_creative_from_post thay cho upload + create_ad_creative. " +
+  "Đăng bài mới lên page rồi chạy quảng cáo (giữ bố cục album, gộp tương tác): tải ảnh qua POST /upload-page-photo/<key> " +
+  "(script tai-anh-page.ps1) -> publish_page_post (người dùng phải đồng ý đăng) -> create_creative_from_post " +
+  "(MESSAGE_PAGE cho quảng cáo tin nhắn; welcome_from_creative để chép mẫu tin nhắn chào). " +
   "Báo cáo: get_saved_report cho dữ liệu đã lưu (nhanh, lịch sử dài), get_insights cho số trực tiếp từ Meta.";
 
 type Rpc = { jsonrpc: "2.0"; id?: string | number | null; method: string; params?: any };
@@ -27,7 +30,7 @@ async function dispatch(msg: Rpc, env: Env) {
       return result(msg.id, {
         protocolVersion: PROTOCOL_VERSIONS.includes(requested) ? requested : PROTOCOL_VERSIONS[0],
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: "meta-ads", title: "Meta Ads", version: "1.0.0" },
+        serverInfo: { name: "meta-ads", title: "Meta Ads", version: "1.1.0" },
         instructions: INSTRUCTIONS,
       });
     }

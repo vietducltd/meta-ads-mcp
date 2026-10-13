@@ -226,6 +226,100 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: "publish_page_post",
+    description:
+      "ĐĂNG BÀI CÔNG KHAI lên Fanpage (chữ, 1 ảnh hoặc album nhiều ảnh) — chỉ gọi khi người dùng đã duyệt nội dung và đồng ý đăng. " +
+      "Ảnh trên máy: tải trước bằng endpoint POST /upload-page-photo/<MCP_AUTH_KEY>?page_id=... (script tai-anh-page.ps1 của skill " +
+      "fb-05-set-quang-cao) để lấy photo_ids; ảnh có URL công khai thì truyền image_urls. Thứ tự ảnh trong bài = thứ tự photo_ids rồi image_urls. " +
+      "Bài do MCP này đăng dùng được ngay cho create_creative_from_post (kể cả gắn nút MESSAGE_PAGE). " +
+      "Truyền scheduled_time để hẹn giờ (10 phút – 75 ngày tới) thay vì đăng ngay; khi đó ảnh trên máy phải tải với &temporary=1.",
+    inputSchema: schema({
+      page_id: str("ID Fanpage (xem list_pages)"),
+      message: str("Nội dung bài viết (giữ nguyên xuống dòng, emoji)"),
+      photo_ids: strList("ID ảnh chưa đăng lấy từ /upload-page-photo, theo thứ tự hiển thị"),
+      image_urls: strList("URL ảnh công khai (tuỳ chọn), đăng sau các photo_ids"),
+      scheduled_time: str("Hẹn giờ đăng, ISO 8601 vd 2026-10-14T20:00:00+0700 (tuỳ chọn; bỏ trống = đăng ngay)"),
+      published: { type: "boolean", default: true,
+        description: "false = tạo bài ẩn (không hiện trên page, dùng làm quảng cáo; bật hiện sau bằng set_post_published)" },
+      call_to_action: str("Nút gắn sẵn vào bài, vd MESSAGE_PAGE (Gửi tin nhắn), LEARN_MORE, SHOP_NOW (tuỳ chọn)"),
+      cta_link: str("Link của nút (MESSAGE_PAGE mặc định https://fb.com/messenger_doc/)"),
+    }, ["page_id", "message"]),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    async run(a, _env, meta) {
+      const pageId = a.page_id;
+      const token = await meta.pageToken(pageId);
+      const ids: string[] = [...(a.photo_ids ?? [])];
+      for (const u of a.image_urls ?? []) {
+        const up = await meta.request("POST", `${pageId}/photos`,
+          { url: u, published: false, temporary: a.scheduled_time ? true : undefined }, undefined, false, token);
+        ids.push(up.id);
+      }
+      if (ids.length > 30) throw new ToolError("Tối đa 30 ảnh mỗi bài.");
+      const params: Args = { message: a.message };
+      if (ids.length) params.attached_media = ids.map((id) => ({ media_fbid: id }));
+      if (a.scheduled_time) {
+        const t = Math.floor(new Date(a.scheduled_time).getTime() / 1000);
+        if (!t) throw new ToolError(`scheduled_time không hợp lệ: ${a.scheduled_time}`);
+        const now = Math.floor(Date.now() / 1000);
+        if (t < now + 600 || t > now + 75 * 86400) throw new ToolError("scheduled_time phải cách hiện tại 10 phút – 75 ngày.");
+        params.published = false;
+        params.scheduled_publish_time = t;
+      } else if (a.published === false) {
+        params.published = false;
+      }
+      if (a.call_to_action) {
+        const type = String(a.call_to_action).toUpperCase();
+        const value: Args = { link: a.cta_link || (type === "MESSAGE_PAGE" ? "https://fb.com/messenger_doc/" : undefined) };
+        if (type === "MESSAGE_PAGE") value.app_destination = "MESSENGER";
+        if (!value.link) throw new ToolError("call_to_action cần cta_link.");
+        params.call_to_action = { type, value };
+      }
+      const post = await meta.request("POST", `${pageId}/feed`, params, undefined, false, token);
+      const info = await meta.request("GET", post.id, { fields: "permalink_url,created_time" }, undefined, false, token)
+        .catch(() => ({}));
+      return {
+        post_id: post.id, link: info.permalink_url ?? `https://www.facebook.com/${post.id}`,
+        so_anh: ids.length,
+        trang_thai: a.scheduled_time ? `đã hẹn ${a.scheduled_time}` : a.published === false ? "bài ẩn (chưa hiện trên page)" : "đã đăng",
+      };
+    },
+  },
+  {
+    name: "graph_request",
+    description:
+      "GỠ LỖI: gọi thẳng Graph API (GET/POST path + params). use_page_token=<page_id> để dùng page access token thay token người dùng. " +
+      "Chỉ dùng để chẩn đoán; thao tác ghi phải được người dùng đồng ý như các tool khác.",
+    inputSchema: schema({
+      method: { type: "string", enum: ["GET", "POST"] },
+      path: str("Đường dẫn Graph, vd 108975761847038_123?fields=... (không kèm phiên bản)"),
+      params: obj("Tham số"),
+      use_page_token: str("ID page để dùng page token (tuỳ chọn)"),
+    }, ["method", "path"]),
+    annotations: CONTROL,
+    async run(a, _env, meta) {
+      const token = a.use_page_token ? await meta.pageToken(a.use_page_token) : undefined;
+      return meta.request(a.method, a.path, a.params ?? {}, undefined, false, token);
+    },
+  },
+  {
+    name: "set_post_published",
+    description:
+      "Bật bài ẩn (tạo bằng publish_page_post published=false) cho HIỆN CÔNG KHAI trên page, giữ nguyên post_id " +
+      "(quảng cáo đang dùng bài này giữ chung tương tác). Chỉ gọi khi người dùng đồng ý cho bài hiện lên page.",
+    inputSchema: schema({
+      page_id: str("ID Fanpage"),
+      post_id: str("ID bài dạng <page_id>_<id>"),
+    }, ["page_id", "post_id"]),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    async run(a, _env, meta) {
+      const token = await meta.pageToken(a.page_id);
+      await meta.request("POST", a.post_id, { is_published: true }, undefined, false, token);
+      const info = await meta.request("GET", a.post_id, { fields: "permalink_url,is_published" }, undefined, false, token)
+        .catch(() => ({}));
+      return { post_id: a.post_id, is_published: info.is_published ?? true, link: info.permalink_url };
+    },
+  },
+  {
     name: "preview_ad",
     description: "Lấy bản xem trước (iframe HTML) của ad hoặc creative.",
     inputSchema: schema({
@@ -358,7 +452,7 @@ export const TOOLS: Tool[] = [
   {
     name: "create_ad_creative",
     description:
-      "Tạo creative dạng ảnh (image_hash) hoặc video (video_id + thumbnail_url/image_hash). " +
+      "Tạo creative dạng ảnh (image_hash), video (video_id + thumbnail_url/image_hash) hoặc băng chuyền (cards). " +
       "call_to_action=MESSAGE_PAGE thì không cần link (mở Messenger).",
     inputSchema: schema({
       account_id: ACCOUNT,
@@ -371,6 +465,15 @@ export const TOOLS: Tool[] = [
       image_hash: str("Từ upload_image"),
       video_id: str("Từ upload_video"),
       thumbnail_url: str("Ảnh bìa video"),
+      cards: {
+        type: "array", minItems: 2, maxItems: 10,
+        description: "Băng chuyền (carousel) 2–10 thẻ, giữ đúng thứ tự. Mỗi thẻ: image_hash (ảnh vuông 1:1), headline, description. " +
+          "Có cards thì bỏ qua image_hash/video_id cấp ngoài.",
+        items: {
+          type: "object", additionalProperties: false, required: ["image_hash"],
+          properties: { image_hash: str("Từ upload_image"), headline: str("Tiêu đề thẻ"), description: str("Mô tả thẻ") },
+        },
+      },
       call_to_action: str("LEARN_MORE (mặc định), SHOP_NOW, SIGN_UP, CONTACT_US, GET_OFFER, ORDER_NOW, BUY_NOW, MESSAGE_PAGE, WHATSAPP_MESSAGE, SUBSCRIBE..."),
       instagram_user_id: str("ID tài khoản Instagram (nếu chạy cả IG)"),
       multi_advertiser: MULTI_ADS,
@@ -391,7 +494,16 @@ export const TOOLS: Tool[] = [
       }
       const clean = (o: Args) => Object.fromEntries(Object.entries(o).filter(([, v]) => v));
       const spec: Args = { page_id: pageId, instagram_user_id: a.instagram_user_id };
-      if (a.video_id) {
+      if (a.cards?.length) {
+        spec.link_data = {
+          ...clean({ link, message: a.message, call_to_action: cta }),
+          child_attachments: a.cards.map((c: Args) => clean({
+            link, image_hash: c.image_hash, name: c.headline, description: c.description, call_to_action: cta,
+          })),
+          multi_share_optimized: false, // giữ đúng thứ tự thẻ
+          multi_share_end_card: false,
+        };
+      } else if (a.video_id) {
         if (!a.thumbnail_url && !a.image_hash) throw new ToolError("Creative video cần thumbnail_url hoặc image_hash.");
         spec.video_data = clean({
           video_id: a.video_id, message: a.message, title: a.headline, link_description: a.description,
@@ -420,10 +532,14 @@ export const TOOLS: Tool[] = [
       account_id: ACCOUNT, name: str("Tên creative"), post_id: str("ID bài viết"), page_id: str("ID Fanpage"),
       call_to_action: str("Nút thay thế: MESSAGE_PAGE (tin nhắn), SHOP_NOW, LEARN_MORE, ORDER_NOW, BUY_NOW, SIGN_UP..."),
       link: str("URL đích của nút (bắt buộc khi có call_to_action, trừ MESSAGE_PAGE)"),
+      welcome_from_creative: str(
+        "Quảng cáo tin nhắn: ID creative có sẵn để chép mẫu tin nhắn chào (page_welcome_message: lời chào, ảnh, câu hỏi gợi ý). " +
+        "Lấy từ quảng cáo đã chọn 'Mẫu đã lưu' trong Ads Manager."),
+      page_welcome_message: str("Hoặc truyền thẳng JSON page_welcome_message (chuỗi)"),
       multi_advertiser: MULTI_ADS,
     }, ["account_id", "name", "post_id"]),
     annotations: WRITE,
-    run(a, env, meta) {
+    async run(a, env, meta) {
       let postId: string = a.post_id;
       if (!postId.includes("_")) {
         const pageId = a.page_id || env.DEFAULT_PAGE_ID;
@@ -437,13 +553,22 @@ export const TOOLS: Tool[] = [
       if (a.call_to_action) {
         const type = a.call_to_action.toUpperCase();
         if (type === "MESSAGE_PAGE") {
-          params.call_to_action = { type, value: { app_destination: "MESSENGER" } };
+          params.call_to_action = { type }; // giống Ads Manager
         } else {
           if (!a.link) throw new ToolError("Thiếu link cho nút call_to_action.");
           params.call_to_action = { type, value: { link: a.link } };
         }
       }
-      return meta.request("POST", `${act(a.account_id, env)}/adcreatives`, params);
+      let welcome: string | undefined = a.page_welcome_message;
+      if (!welcome && a.welcome_from_creative) {
+        welcome = (await meta.request("GET", a.welcome_from_creative, { fields: "page_welcome_message" })).page_welcome_message;
+        if (!welcome) throw new ToolError(`Creative ${a.welcome_from_creative} không có mẫu tin nhắn chào.`);
+      }
+      if (welcome) params.page_welcome_message = welcome; // chuỗi JSON, gửi nguyên văn
+      // Bài ĐÃ ĐĂNG trên page: phải tạo creative bằng PAGE token. Dùng token người dùng thì Meta trả lỗi giả
+      // 3858792 "không có quyền…" (trừ bài ẩn do tài khoản quảng cáo tạo, hoặc bài đã được Ads Manager dùng trước).
+      const pageToken = await meta.pageToken(postId.split("_")[0]);
+      return meta.request("POST", `${act(a.account_id, env)}/adcreatives`, params, undefined, false, pageToken);
     },
   },
   {
