@@ -83,6 +83,17 @@ tài khoản quảng cáo của bạn, và bạn là **quản trị viên** củ
    Ở bước 2 (chỉ định tài sản), quyền trên **Trang** phải gồm cả **tạo nội dung**
    và **quảng cáo**, nếu không sẽ không đăng bài hay tạo quảng cáo từ bài được.
 
+> **Chế độ ứng dụng:** app loại **Doanh nghiệp** (mục 2a) không có công tắc
+> Development/Live và dùng mức truy cập **Standard** — đủ cho Page và tài khoản
+> quảng cáo nằm trong Business Manager của bạn. **Không cần** xác minh doanh
+> nghiệp hay gửi duyệt ứng dụng (App Review). Nếu trang app có công tắc
+> **Chế độ ứng dụng: Development** (lỡ chọn loại khác), bài MCP đăng lên Page sẽ
+> chỉ người có vai trò trong app thấy ảnh và không chạy quảng cáo được: tạo lại
+> app loại Doanh nghiệp, hoặc vào **Cài đặt → Thông tin cơ bản** điền URL chính
+> sách quyền riêng tư, biểu tượng, danh mục rồi gạt sang **Live**.
+> Tự kiểm tra: sau khi MCP đăng bài, mở link bài bằng **cửa sổ ẩn danh** (không
+> đăng nhập Facebook) — thấy đủ chữ và ảnh là ổn.
+
 4. Bấm **Tạo mã** → **sao chép token ngay**, vì Meta chỉ hiện một lần. Token bắt
    đầu bằng `EAA...`
 
@@ -238,6 +249,7 @@ nhắn chào (`welcome_from_creative`), quảng cáo băng chuyền (`cards`), t
 | Vừa cập nhật MCP mà Claude không thấy công cụ mới | Danh sách công cụ nạp lúc mở phiên: mở phiên mới (hoặc Reconnect server meta-ads) |
 | Tạo creative từ bài trên Page báo lỗi `3858792` "không có quyền quảng cáo… Trang… tài sản file phương tiện" | Bản MCP cũ tạo creative bằng token người dùng. Meta bắt buộc **page token** với bài đã đăng (lỗi này không phải do thiếu quyền). Cập nhật MCP (`git pull`, `npm run deploy`) |
 | `publish_page_post` báo thiếu quyền | Token chưa có `pages_manage_posts`, hoặc người dùng hệ thống chưa có quyền tạo nội dung trên Trang (mục 2b) |
+| Bài MCP đăng lên Page: người khác không thấy ảnh / tạo quảng cáo báo `1885183` "app in development mode" | App đang ở chế độ Development (không phải loại Doanh nghiệp). Xem ghi chú "Chế độ ứng dụng" ở mục 2b |
 | Đổi tên Worker trong `wrangler.jsonc` | Đổi luôn `"service"` ở mục `services` cho giống tên mới |
 
 ## Bảo mật
